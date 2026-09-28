@@ -1,18 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { createRoot } from 'react-dom/client';
 import { all, create } from 'mathjs';
+import { createRoot } from 'react-dom/client';
 import './styles.css';
 
 const math = create(all);
-math.import({
-  sin: (x) => Math.sin(x),
-  cos: (x) => Math.cos(x),
-  tan: (x) => Math.tan(x),
-  asin: (x) => Math.asin(x),
-  acos: (x) => Math.acos(x),
-  atan: (x) => Math.atan(x),
-}, { override: true });
-
 const STORAGE_KEY = 'scientific-calculator-history';
 
 const basicKeys = [
@@ -31,25 +22,37 @@ const scientificKeys = [
 ];
 
 function formatNumber(value) {
-  if (!Number.isFinite(value)) return 'Error';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Error';
   if (Math.abs(value) >= 1e12 || (Math.abs(value) > 0 && Math.abs(value) < 1e-9)) {
-    return value.toExponential(8).replace(/\.?(0+)(?=e)/, '');
+    return value.toExponential(8).replace(/\.?0+(?=e)/, '');
   }
   return Number(value.toPrecision(12)).toString();
+}
+
+function readHistory() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function App() {
   const [expression, setExpression] = useState('');
   const [result, setResult] = useState('0');
   const [angleMode, setAngleMode] = useState('DEG');
-  const [history, setHistory] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
-  });
+  const [history, setHistory] = useState(readHistory);
   const [showHistory, setShowHistory] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    } catch {
+      // Local storage can be unavailable in private/restricted browser contexts.
+    }
   }, [history]);
 
   const preview = useMemo(() => {
@@ -68,10 +71,13 @@ function App() {
 
   function evaluateExpression() {
     if (!expression.trim()) return;
+
     try {
       const value = evaluate(expression, angleMode);
       const formatted = formatNumber(value);
+
       if (formatted === 'Error') throw new Error('Invalid result');
+
       setResult(formatted);
       setHistory((items) => [{ expression, result: formatted }, ...items].slice(0, 30));
       setExpression('');
@@ -97,8 +103,17 @@ function App() {
     if (key === 'Enter' || key === '=') return evaluateExpression();
     if (key === 'Escape') return clear();
     if (key === 'Backspace') return removeLast();
-    const operators = { '+': '+', '-': '-', '*': '×', '/': '÷', '(': '(', ')': ')' };
-    if (operators[key]) return append(operators[key]);
+
+    const operators = {
+      '+': '+',
+      '-': '−',
+      '*': '×',
+      '/': '÷',
+      '(': '(',
+      ')': ')',
+    };
+
+    if (operators[key]) append(operators[key]);
   }
 
   useEffect(() => {
@@ -109,21 +124,50 @@ function App() {
 
   function handleScientific(label) {
     setError('');
+
     switch (label) {
-      case 'sin': case 'cos': case 'tan': case 'log': case 'ln':
-        append(`${label}(`); break;
-      case 'sin⁻¹': append('asin('); break;
-      case 'cos⁻¹': append('acos('); break;
-      case 'tan⁻¹': append('atan('); break;
-      case '√': append('sqrt('); break;
-      case 'x²': append('^2'); break;
-      case 'xʸ': append('^'); break;
-      case 'x!': append('!'); break;
-      case 'π': append('pi'); break;
-      case 'e': append('e'); break;
-      case 'Ans': append(result); break;
-      case 'DEG': setAngleMode((mode) => mode === 'DEG' ? 'RAD' : 'DEG'); break;
-      default: break;
+      case 'sin':
+      case 'cos':
+      case 'tan':
+      case 'log':
+      case 'ln':
+        append(`${label}(`);
+        break;
+      case 'sin⁻¹':
+        append('asin(');
+        break;
+      case 'cos⁻¹':
+        append('acos(');
+        break;
+      case 'tan⁻¹':
+        append('atan(');
+        break;
+      case '√':
+        append('sqrt(');
+        break;
+      case 'x²':
+        append('^2');
+        break;
+      case 'xʸ':
+        append('^');
+        break;
+      case 'x!':
+        append('!');
+        break;
+      case 'π':
+        append('pi');
+        break;
+      case 'e':
+        append('e');
+        break;
+      case 'Ans':
+        append(result);
+        break;
+      case 'DEG':
+        setAngleMode((mode) => (mode === 'DEG' ? 'RAD' : 'DEG'));
+        break;
+      default:
+        break;
     }
   }
 
@@ -157,14 +201,16 @@ function App() {
 
         <div className="mode-row">
           <span>Scientific mode</span>
-          <button className="mode-pill" onClick={() => setAngleMode((mode) => mode === 'DEG' ? 'RAD' : 'DEG')}>
+          <button className="mode-pill" onClick={() => setAngleMode((mode) => (mode === 'DEG' ? 'RAD' : 'DEG'))}>
             {angleMode} <span>⌄</span>
           </button>
         </div>
 
         <div className="scientific-grid">
           {scientificKeys.map(([label, type]) => (
-            <button key={label} className={`key scientific ${type}`} onClick={() => handleScientific(label)}>{label}</button>
+            <button key={label} className={`key scientific ${type}`} onClick={() => handleScientific(label)}>
+              {label}
+            </button>
           ))}
         </div>
 
@@ -173,8 +219,10 @@ function App() {
             <button
               key={label}
               className={`key ${type}`}
-              onClick={() => type === 'action' ? (label === 'AC' ? clear() : removeLast()) : append(label)}
-            >{label}</button>
+              onClick={() => (type === 'action' ? (label === 'AC' ? clear() : removeLast()) : append(label))}
+            >
+              {label}
+            </button>
           ))}
           <button className="key equals" onClick={evaluateExpression}>=</button>
         </div>
@@ -188,11 +236,13 @@ function App() {
             <div><p className="eyebrow">RECENT</p><h2>Calculation history</h2></div>
             <button onClick={clearHistory}>Clear</button>
           </div>
+
           {history.length === 0 ? (
             <div className="empty-history">No calculations yet.</div>
           ) : history.map((item, index) => (
             <button className="history-item" key={`${item.expression}-${index}`} onClick={() => selectHistory(item)}>
-              <span>{item.expression}</span><strong>= {item.result}</strong>
+              <span>{item.expression}</span>
+              <strong>= {item.result}</strong>
             </button>
           ))}
         </aside>
@@ -206,6 +256,7 @@ function evaluate(expression, angleMode) {
     .replaceAll('×', '*')
     .replaceAll('÷', '/')
     .replaceAll('−', '-');
+
   const scope = angleMode === 'DEG'
     ? {
         sin: (x) => Math.sin(x * Math.PI / 180),
@@ -216,9 +267,14 @@ function evaluate(expression, angleMode) {
         atan: (x) => Math.atan(x) * 180 / Math.PI,
       }
     : {
-        sin: Math.sin, cos: Math.cos, tan: Math.tan,
-        asin: Math.asin, acos: Math.acos, atan: Math.atan,
+        sin: Math.sin,
+        cos: Math.cos,
+        tan: Math.tan,
+        asin: Math.asin,
+        acos: Math.acos,
+        atan: Math.atan,
       };
+
   return math.evaluate(normalized, scope);
 }
 
